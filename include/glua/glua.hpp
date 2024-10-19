@@ -1,8 +1,13 @@
 #ifndef GLUA_HPP
 #define GLUA_HPP
+
 #include "describe/describe.hpp"
-#include "meta/meta.hpp"
+#include <cmath>
+#include <cstdlib>
+#include <stdexcept>
+#include <string>
 #include <optional>
+
 extern "C" {
 #include <lua.h>
 #include <lualib.h>
@@ -10,6 +15,46 @@ extern "C" {
 }
 
 namespace glua {
+
+namespace meta {
+
+struct never{};
+
+template<typename...Args> struct TypeList {};
+
+template<typename Pack> struct HeadTypeOf {
+    using type = never;
+};
+
+template<typename Head, typename...Rest> struct HeadTypeOf<TypeList<Head, Rest...>> {
+    using type = Head;
+};
+
+template<typename Func, typename=void> struct RipFunc;
+
+template<typename R, typename...A> struct RipFunc<R(A...)> {
+    using Ret = R;
+    using Args = TypeList<A...>;
+    static constexpr auto ArgCount = sizeof...(A);
+    static constexpr bool IsMethod = false;
+};
+template<typename R, typename... A>
+struct RipFunc<R (*)(A...)> : RipFunc<R(A...)>
+{};
+template<typename R, typename... A>
+struct RipFunc<R (&)(A...)> : RipFunc<R(A...)>
+{};
+template<typename C, typename R, typename...A>
+struct RipFunc<R(C::*)(A...)> : RipFunc<R(A...)> {
+    using Cls = C;
+    static constexpr bool IsMethod = true;
+};
+template<typename C, typename R, typename...A>
+struct RipFunc<R(C::*)(A...) const> : RipFunc<R(C::*)(A...)> {};
+template<typename Fn> struct RipFunc<Fn, std::enable_if_t<std::is_class_v<Fn>>> : RipFunc<decltype(&Fn::operator())>
+{};
+
+} //meta
 
 struct ReadOnly {}; //attribute to make DESCRIBED() member field read-only
 
@@ -27,8 +72,21 @@ int protect(lua_State* L) noexcept {
     std::abort();
 }
 
+[[noreturn]]
+#ifdef __GNUC__
+__attribute__((format(printf, 1, 2)))
+#endif
+inline void throwF(const char* fmt, ...) {
+    char buff[512];
+    va_list va;
+    va_start(va, fmt);
+    vsnprintf(buff, sizeof(buff), fmt, va);
+    va_end(va);
+    throw std::runtime_error(buff);
+}
+
 template<typename T>
-inline string name_for = string{describe::Get<T>().name};
+inline std::string name_for = string{describe::Get<T>().name};
 
 template<typename T>
 T* TestUData(lua_State* L, int idx) {
@@ -40,7 +98,7 @@ T& CheckUData(lua_State* L, int idx) {
     if (auto u = static_cast<T*>(luaL_testudata(L, idx, name_for<T>.c_str()))) {
         return *u;
     } else {
-        throw Err("arg #{} is not of type '{}'", idx, name_for<T>);
+        throwF("arg #%d is not of type '%s'", idx, name_for<T>.c_str());
     }
 }
 
@@ -55,16 +113,16 @@ std::pair<T*, string_view> self_key(lua_State* L) {
 
 inline void range_check(double v, int idx, double l, double h) {
     if (std::round(v) != v) {
-        throw Err("arg #{} is not an integer", idx);
+        throwF("arg #%d is not an integer", idx);
     }
     if (v < l || h < v) {
-        throw Err("arg #{} does not fit into [{}-{}]", idx, l, h);
+        throwF("arg #%d does not fit into [%lf-%lf]", idx, l, h);
     }
 }
 
 inline void type_check(lua_State* L, int idx, int t, int wanted) {
     if (t != wanted) {
-        throw Err("arg #{} is not a '{}', but a '{}'", idx, lua_typename(L, wanted), lua_typename(L, t));
+        throwF("arg #%d is not a '%s', but a '%s'", idx, lua_typename(L, wanted), lua_typename(L, t));
     }
 }
 
@@ -117,10 +175,15 @@ void Pop(lua_State* L, std::optional<T>& val, int idx = -1) {
     }
 }
 
+template<typename T, std::enable_if_t<describe::is_described_struct_v<T>, int> = 1>
+void Pop(lua_State* L, T*& ptr, int idx = -1) {
+    ptr = &CheckUData<T>(L, idx);
+}
+
 template<typename T, std::enable_if_t<std::is_arithmetic_v<T>, int> = 1>
 void Push(lua_State* L, T val) {
     if (!lua_checkstack(L, 1)) {
-        throw Err("Could not reserve stack");
+        throwF("Could not reserve stack");
     }
     if constexpr (std::is_floating_point_v<T>) {
         lua_pushnumber(L, val);
@@ -154,6 +217,15 @@ int index_for(lua_State* L) {
     return 1;
 }
 
+namespace detail {
+[[noreturn]] inline void cannot_set(string_view f, string_view cls) {
+    auto fs = int(f.size());
+    auto cs = int(cls.size());
+    throwF("Cannot set field '%.*s' on '%.*s'",
+           fs < 0 ? 0 : fs, f.data(), cs < 0 ? 0 : 0, cls.data());
+}
+}
+
 template<typename T>
 int newindex_for(lua_State* L) {
     constexpr auto desc = describe::Get<T>();
@@ -171,7 +243,7 @@ int newindex_for(lua_State* L) {
         }
     });
     if (!hit) {
-        throw Err("Cannot set field '{}' on '{}'", sk.second, desc.name);
+        detail::cannot_set(sk.second, desc.name);
     }
     return 0;
 }
@@ -197,7 +269,7 @@ T Get(lua_State* L, int idx) {
 
 inline void check_ret_space(lua_State* L) {
     if (!lua_checkstack(L, 1)) {
-        throw Err("could not push function result");
+        throwF("Could not push function result");
     }
 }
 
@@ -263,7 +335,7 @@ void PushMetaTable(lua_State* L) {
 template<typename T>
 void PushFromMetatable(lua_State* L, string_view key) {
     if (!lua_checkstack(L, 2)) {
-        throw Err("could not reserve stack for MetaTable");
+        throwF("could not reserve stack for MetaTable");
     }
     PushMetaTable<T>(L);
     lua_pushlstring(L, key.data(), key.size());
@@ -280,7 +352,7 @@ void PushMethodsTable(lua_State* L) {
 template<typename T, std::enable_if_t<describe::is_described_struct_v<T>, int> = 1>
 void Push(lua_State* L, T val) {
     if (!lua_checkstack(L, 1)) {
-        throw Err("Could not reserve stack");
+        throwF("Could not reserve stack");
     }
     auto ud = lua_newuserdata(L, sizeof(T));
     new (ud) T{std::move(val)};
@@ -290,7 +362,7 @@ void Push(lua_State* L, T val) {
 
 inline void SetThis(lua_State* L, void* key, void* th) {
     if (!lua_checkstack(L, 2)) {
-        throw Err("SetThis(): out of stack space");
+        throwF("SetThis(): out of stack space");
     }
     lua_pushlightuserdata(L, key);
     lua_pushlightuserdata(L, th);
@@ -300,7 +372,7 @@ inline void SetThis(lua_State* L, void* key, void* th) {
 template<typename T>
 T* GetThis(lua_State* L, void* key) {
     if (!lua_checkstack(L, 1)) {
-        throw Err("GetThis(): out of stack space");
+        throwF("GetThis(): out of stack space");
     }
     lua_rawgetp(L, LUA_REGISTRYINDEX, key);
     auto res = static_cast<T*>(lua_touserdata(L, -1));
@@ -315,10 +387,10 @@ void Push(lua_State* L, std::optional<T> v) {
 
 template<auto f, typename rip, size_t...Is, typename...Args>
 void call(lua_State* L, std::index_sequence<Is...>, meta::TypeList<Args...> args) {
-    using Head = meta::HeadTypeOf_t<decltype(args)>;
+    using Head = typename meta::HeadTypeOf<decltype(args)>;
     using Ret = typename rip::Ret;
     constexpr int fix = std::is_same_v<Head, lua_State*> ? -1 : 0;
-    constexpr auto is_method = std::is_member_function_pointer_v<decltype(f)>;
+    constexpr auto is_method = rip::IsMethod;
     if constexpr (std::is_void_v<typename rip::Ret>) {
         if constexpr (is_method) {
             auto& self = CheckUData<typename rip::Cls>(L, 1);
