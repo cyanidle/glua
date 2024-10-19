@@ -387,7 +387,7 @@ void Push(lua_State* L, std::optional<T> v) {
 
 template<auto f, typename rip, size_t...Is, typename...Args>
 void call(lua_State* L, std::index_sequence<Is...>, meta::TypeList<Args...> args) {
-    using Head = typename meta::HeadTypeOf<decltype(args)>;
+    using Head = typename meta::HeadTypeOf<decltype(args)>::type;
     using Ret = typename rip::Ret;
     constexpr int fix = std::is_same_v<Head, lua_State*> ? -1 : 0;
     constexpr auto is_method = rip::IsMethod;
