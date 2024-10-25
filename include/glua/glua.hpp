@@ -374,7 +374,8 @@ T* GetThis(lua_State* L, void* key) {
     if (!lua_checkstack(L, 1)) {
         throwF("GetThis(): out of stack space");
     }
-    lua_rawgetp(L, LUA_REGISTRYINDEX, key);
+    lua_pushlightuserdata(L, key);
+    lua_rawget(L, LUA_REGISTRYINDEX);
     auto res = static_cast<T*>(lua_touserdata(L, -1));
     lua_pop(L, 1);
     return res;
