@@ -222,7 +222,7 @@ namespace detail {
     auto fs = int(f.size());
     auto cs = int(cls.size());
     throwF("Cannot set field '%.*s' on '%.*s'",
-           fs < 0 ? 0 : fs, f.data(), cs < 0 ? 0 : 0, cls.data());
+           fs < 0 ? 0 : fs, f.data(), cs < 0 ? 0 : cs, cls.data());
 }
 }
 
