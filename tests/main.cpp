@@ -52,6 +52,7 @@ int main(int argc, char *argv[])
     lua_setglobal(L, "alexej");
 
     auto script = R"(
+        assert(num == 123)
         print(polina:GreetAnother(alexej))
     )";
 
@@ -63,7 +64,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "glua: Test ok.\n");
         ret = 0;
     } else {
-        fprintf(stderr, "glua: Test fail.\n");
+        fprintf(stderr, "glua: Test fail: %s.\n", lua_tostring(L, -1));
         ret = 1;
     }
 

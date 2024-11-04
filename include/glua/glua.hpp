@@ -203,10 +203,12 @@ int index_for(lua_State* L) {
     constexpr auto desc = describe::Get<T>();
     auto sk = self_key<T>(L);
     bool hit = false;
-    desc.for_each_field([&](auto f){
-        if (!hit && f.name == sk.second) {
-            hit = true;
-            Push(L, f.get(*sk.first));
+    desc.for_each([&](auto f){
+        if constexpr (f.is_field) {
+            if (!hit && f.name == sk.second) {
+                hit = true;
+                Push(L, f.get(*sk.first));
+            }
         }
     });
     if (!hit) {
@@ -232,13 +234,15 @@ int newindex_for(lua_State* L) {
     auto sk = self_key<T>(L);
     bool hit = false;
     lua_pushvalue(L, 3);
-    desc.for_each_field([&](auto f){
-        using F = decltype(f);
-        constexpr auto ro = describe::has_attr_v<ReadOnly, F>;
-        if constexpr (!ro) {
-            if (!hit && f.name == sk.second) {
-                hit = true;
-                Pop(L, f.get(*sk.first));
+    desc.for_each([&](auto f){
+        if constexpr (f.is_field) {
+            using F = decltype(f);
+            constexpr auto ro = describe::has_attr_v<ReadOnly, F>;
+            if constexpr (!ro) {
+                if (!hit && f.name == sk.second) {
+                    hit = true;
+                    Pop(L, f.get(*sk.first));
+                }
             }
         }
     });
