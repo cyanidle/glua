@@ -16,46 +16,6 @@ extern "C" {
 
 namespace glua {
 
-namespace meta {
-
-struct never{};
-
-template<typename...Args> struct TypeList {};
-
-template<typename Pack> struct HeadTypeOf {
-    using type = never;
-};
-
-template<typename Head, typename...Rest> struct HeadTypeOf<TypeList<Head, Rest...>> {
-    using type = Head;
-};
-
-template<typename Func, typename=void> struct RipFunc;
-
-template<typename R, typename...A> struct RipFunc<R(A...)> {
-    using Ret = R;
-    using Args = TypeList<A...>;
-    static constexpr auto ArgCount = sizeof...(A);
-    static constexpr bool IsMethod = false;
-};
-template<typename R, typename... A>
-struct RipFunc<R (*)(A...)> : RipFunc<R(A...)>
-{};
-template<typename R, typename... A>
-struct RipFunc<R (&)(A...)> : RipFunc<R(A...)>
-{};
-template<typename C, typename R, typename...A>
-struct RipFunc<R(C::*)(A...)> : RipFunc<R(A...)> {
-    using Cls = C;
-    static constexpr bool IsMethod = true;
-};
-template<typename C, typename R, typename...A>
-struct RipFunc<R(C::*)(A...) const> : RipFunc<R(C::*)(A...)> {};
-template<typename Fn> struct RipFunc<Fn, std::enable_if_t<std::is_class_v<Fn>>> : RipFunc<decltype(&Fn::operator())>
-{};
-
-} //meta
-
 struct ReadOnly {}; //attribute to make DESCRIBED() member field read-only
 
 using std::string_view;
@@ -277,6 +237,46 @@ inline void check_ret_space(lua_State* L) {
     }
 }
 
+namespace meta {
+
+struct never{};
+
+template<typename...Args> struct TypeList {};
+
+template<typename Pack> struct HeadTypeOf {
+    using type = never;
+};
+
+template<typename Head, typename...Rest> struct HeadTypeOf<TypeList<Head, Rest...>> {
+    using type = Head;
+};
+
+template<typename Func, typename=void> struct RipFunc;
+
+template<typename R, typename...A> struct RipFunc<R(A...)> {
+    using Ret = R;
+    using Args = TypeList<A...>;
+    static constexpr auto ArgCount = sizeof...(A);
+    static constexpr bool IsMethod = false;
+};
+template<typename R, typename... A>
+struct RipFunc<R (*)(A...)> : RipFunc<R(A...)>
+{};
+template<typename R, typename... A>
+struct RipFunc<R (&)(A...)> : RipFunc<R(A...)>
+{};
+template<typename C, typename R, typename...A>
+struct RipFunc<R(C::*)(A...)> : RipFunc<R(A...)> {
+    using Cls = C;
+    static constexpr bool IsMethod = true;
+};
+template<typename C, typename R, typename...A>
+struct RipFunc<R(C::*)(A...) const> : RipFunc<R(C::*)(A...)> {};
+template<typename Fn> struct RipFunc<Fn, std::enable_if_t<std::is_class_v<Fn>>> : RipFunc<decltype(&Fn::operator())>
+{};
+
+} //meta
+
 template<auto f, typename rip, size_t...Is, typename...Args>
 void call(lua_State* L, std::index_sequence<Is...>, meta::TypeList<Args...> args);
 
@@ -417,6 +417,6 @@ void call(lua_State* L, std::index_sequence<Is...>, meta::TypeList<Args...> args
     }
 }
 
-}
+} //glua
 
 #endif //GLUA_HPP
