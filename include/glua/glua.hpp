@@ -128,7 +128,8 @@ inline void Pop(lua_State* L, string& val, int idx = -1) {
 
 template<typename T>
 void Pop(lua_State* L, std::optional<T>& val, int idx = -1) {
-    if (lua_isnil(L, idx)) {
+    auto t = lua_type(L, idx);
+    if (t == LUA_TNIL || t == LUA_TNONE) {
         val.reset();
     } else {
         Pop(L, val.emplace(), idx);
