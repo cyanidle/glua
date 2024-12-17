@@ -5,7 +5,7 @@ include(CPM.cmake)
 
 option(GLUA_TESTS "Build glua tests" OFF)
 
-CPMAddPackage("gh:cyanidle/describe@2.0")
+CPMAddPackage("gh:cyanidle/describe@3.0")
 
 add_library(glua INTERFACE)
 target_include_directories(glua INTERFACE include)

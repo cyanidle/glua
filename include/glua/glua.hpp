@@ -198,7 +198,7 @@ int newindex_for(lua_State* L) {
     desc.for_each([&](auto f){
         if constexpr (f.is_field) {
             using F = decltype(f);
-            constexpr auto ro = describe::has_attr_v<ReadOnly, F>;
+            constexpr auto ro = describe::has_v<ReadOnly, F>;
             if constexpr (!ro) {
                 if (!hit && f.name == sk.second) {
                     hit = true;

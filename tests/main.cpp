@@ -22,7 +22,13 @@ struct Person {
         return "Hello " + name;
     }
 };
-DESCRIBE(Person, &_::name, &_::age, &_::Hello)
+
+DESCRIBE("Person", Person) {
+    MEMBER("name", &_::name);
+    MEMBER("age", &_::age);
+    MEMBER("Hello", &_::Hello);
+}
+
 
 static std::string GreetAnother(Person* a, Person* b) {
     return "Hello from: " + a->name + " to: " + b->name;
