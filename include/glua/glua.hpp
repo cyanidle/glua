@@ -22,7 +22,7 @@ using std::string_view;
 using std::string;
 
 template<auto f> //needed to safely convert possible exceptions into lua errors
-int protect(lua_State* L) noexcept {
+int protect(lua_State* L) {
     try {
         return f(L);
     } catch (std::exception& e) {
@@ -282,7 +282,7 @@ template<auto f, typename rip, size_t...Is, typename...Args>
 void call(lua_State* L, std::index_sequence<Is...>, meta::TypeList<Args...> args);
 
 template<auto method>
-int Wrap(lua_State* L) noexcept {
+int Wrap(lua_State* L) {
     try {
         using rip = meta::RipFunc<decltype(method)>;
         using args = typename rip::Args;
